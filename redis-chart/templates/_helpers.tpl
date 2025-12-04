@@ -11,7 +11,7 @@
 {{- define "redis.labels" -}}
 app.kubernetes.io/name: {{ include "redis.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/version: {{ .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: Helm
 {{- end }}
 
