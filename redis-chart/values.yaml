@@ -1,0 +1,49 @@
+image:
+  repository: redis
+  tag: "7.2-alpine"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# StatefulSet replica count. pod-0 is primary; pods 1..N are replicas.
+replicaCount: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+service:
+  type: ClusterIP
+  port: 6379
+
+headless:
+  annotations: {}
+  port: 6379
+
+auth:
+  enabled: false
+  password: ""
+
+persistence:
+  enabled: false
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+
+config:
+  appendonly: "yes"
+  maxmemoryPolicy: "noeviction"
+  tcpKeepalive: "300"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

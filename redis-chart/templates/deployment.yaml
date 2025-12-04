@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "redis.fullname" . }}
+  labels:
+    {{- include "redis.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "redis.fullname" . }}-headless
+  replicas:
+    {{- if .Values.autoscaling.enabled }}
+    {{ .Values.autoscaling.minReplicas | default 1 }}
+    {{- else }}
+    {{ .Values.replicaCount | default 1 }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "redis.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "redis.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          env:
+            {{- if .Values.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "redis.fullname" . }}-auth
+                  key: password
+            {{- else }}
+            - name: REDIS_PASSWORD
+              value: ""
+            {{- end }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              ordinal=${HOSTNAME##*-}
+              if [ "$ordinal" = "0" ]; then
+                cp /config/master.conf /data/redis.conf
+              else
+                cp /config/replica.conf /data/redis.conf
+                echo "replicaof {{ include "redis.fullname" . }}-0.{{ include "redis.fullname" . }}-headless {{ .Values.service.port }}" >> /data/redis.conf
+              fi
+              if [ "{{ .Values.auth.enabled }}" = "true" ]; then
+                echo "requirepass ${REDIS_PASSWORD}" >> /data/redis.conf
+                echo "masterauth ${REDIS_PASSWORD}" >> /data/redis.conf
+              fi
+              exec redis-server /data/redis.conf
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /config
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  if [ "{{ .Values.auth.enabled }}" = "true" ]; then
+                    redis-cli -a "$REDIS_PASSWORD" ping
+                  else
+                    redis-cli ping
+                  fi
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  if [ "{{ .Values.auth.enabled }}" = "true" ]; then
+                    redis-cli -a "$REDIS_PASSWORD" ping
+                  else
+                    redis-cli ping
+                  fi
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "redis.fullname" . }}-config
+      {{- if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}
