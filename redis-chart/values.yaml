@@ -17,7 +17,7 @@ autoscaling:
   targetMemoryUtilizationPercentage: 80
 
 service:
-  type: ClusterIP
+  type: LoadBalancer
   port: 6379
 
 headless:
